@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"archive/zip"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -15,25 +16,42 @@ type fileType struct {
 	Body []byte
 }
 
-func main() {
-	processCommandLine()
+var (
+	method      string
+	archivePath string
+)
+
+func init() {
+	flag.StringVar(&method, "method", "tar", "Compression method: tar or zip")
+	flag.StringVar(&archivePath, "path", "archive.tar", "Path of the output archived file")
+	flag.Parse()
+	if len(flag.Args()) == 0 {
+		printUsage()
+	}
+	fmt.Println("method:", method)
+	fmt.Println("archivePath is:", archivePath)
+	fmt.Println("flag args are:", flag.Args())
 }
 
-func processCommandLine() {
-	if len(os.Args) < 4 {
-		printUsage()
-	} else {
-		cmd := os.Args[1]
-		switch cmd {
-		case "tar":
-			tarFiles()
-		case "zip":
-			zipFiles()
-		default:
-			printUsage()
-		}
-	}
+func main() {
+	//processCommandLine()
 }
+
+// func processCommandLine() {
+// 	if len(os.Args) < 4 {
+// 		printUsage()
+// 	} else {
+// 		cmd := os.Args[1]
+// 		switch cmd {
+// 		case "tar":
+// 			tarFiles()
+// 		case "zip":
+// 			zipFiles()
+// 		default:
+// 			printUsage()
+// 		}
+// 	}
+// }
 
 func printUsage() {
 	fmt.Println("Usage:")
