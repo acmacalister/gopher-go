@@ -1,14 +1,11 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"compress/bzip2"
 	"compress/gzip"
 	"compress/zlib"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -18,83 +15,73 @@ func main() {
 	processCommandLine()
 }
 
+//Process Command Line Args.
 func processCommandLine() {
 	if len(os.Args) < 3 {
 		printUsage()
 	} else {
+		file, err := os.Open(os.Args[2])
+		if err != nil {
+			log.Fatal(err)
+		}
 		cmd := os.Args[1]
 		switch cmd {
 		case "gzip":
-			gzipFiles()
+			gzipFiles(file)
 		case "bzip":
-			bzipFiles()
+			bzipFiles(file)
 		case "zlibFiles":
-			zlibFiles()
+			zlibFiles(file)
 		default:
 			printUsage()
 		}
 	}
 }
 
-func gzipFiles() {
-	b := readFile()
-	r, err := gzip.NewReader(b)
+// Create new Reader for gzip files.
+func gzipFiles(f *os.File) {
+	in, err := gzip.NewReader(f)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer r.Close()
-	filename := strings.TrimSuffix(os.Args[2], ".gz")
-	writeFile(filename, r)
+	decompress(in, ".gz")
 }
 
-func bzipFiles() {
-	b := readFile()
-	r := bzip2.NewReader(b)
-	filename := strings.TrimSuffix(os.Args[2], ".bz2")
-	writeFile(filename, r)
+// Create new Reader for bzip2 files.
+func bzipFiles(f *os.File) {
+	in := bzip2.NewReader(f)
+	decompress(in, ".bz2")
 }
 
-func zlibFiles() {
-	b := readFile()
-	r, err := zlib.NewReader(b)
+// Create new Reader for zlib files.
+func zlibFiles(f *os.File) {
+	in, err := zlib.NewReader(f)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer r.Close()
-	filename := strings.TrimSuffix(os.Args[2], ".zlib")
-	writeFile(filename, r)
+	decompress(in, ".zlib")
+
 }
 
-func writeFile(filename string, r io.Reader) {
-	fo, err := os.Create(filename)
+// Create a new file and write the contents of the
+// compressed file to it.
+func decompress(r io.Reader, ext string) {
+	trimmed := strings.TrimSuffix(os.Args[2], ext)
+	out, err := os.Create(trimmed)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	defer func() {
-		if err := fo.Close(); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	w := bufio.NewWriter(fo)
-	w.ReadFrom(r)
-	if err = w.Flush(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func readFile() *bytes.Reader {
-	buffer, err := ioutil.ReadFile(os.Args[2])
+	_, err = io.Copy(out, r)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return bytes.NewReader(buffer)
+	out.Close()
 }
 
+// Prints a simple help menu.
 func printUsage() {
 	fmt.Println("Usage:")
-	fmt.Println("compress gzip file.gz")
-	fmt.Println("compress bzip file.bz2")
-	fmt.Println("compress zlib file.zlib")
+	fmt.Println("decompress gzip file.gz")
+	fmt.Println("decompress bzip file.bz2")
+	fmt.Println("decompress zlib file.zlib")
 }
