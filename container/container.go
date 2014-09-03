@@ -8,7 +8,7 @@ import (
 
 const (
 	vulcanQuote = "Live long and prosper."
-	size        = 1000
+	size        = 10000
 )
 
 func main() {
