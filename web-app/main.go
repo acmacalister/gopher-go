@@ -95,7 +95,7 @@ func main() {
 	router.HandleFunc("/guitars", h.guitarsCreateHandler).Methods("POST")
 	router.HandleFunc("/guitars/{id:[0-9]+}", h.guitarsShowHandler).Methods("GET")
 	router.HandleFunc("/guitars/{id:[0-9]+}", h.guitarsUpdateHandler).Methods("PUT", "PATCH")
-	router.HandleFunc("/guitars/{id:[0-9]+}", h.guitarsDestroyHandler).Methods("DESTROY")
+	router.HandleFunc("/guitars/{id:[0-9]+}", h.guitarsDestroyHandler).Methods("DELETE")
 
 	n := negroni.Classic()
 	n.UseHandler(router)
