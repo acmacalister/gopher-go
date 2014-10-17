@@ -1,6 +1,8 @@
 package main
 
 import (
+	"code.google.com/p/go.crypto/bcrypt"
+	"encoding/hex"
 	"fmt"
 	"github.com/acmacalister/skittles"
 	"github.com/codegangsta/negroni"
@@ -11,6 +13,7 @@ import (
 	"gopkg.in/unrolled/render.v1"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -43,7 +46,18 @@ type GuitarForm struct {
 	Color string
 }
 
-// to do some validation on our input fields. File is done seperately.
+//Our User to auth our people
+type User struct {
+	Id             int64     `json:"id"`
+	Name           string    `json:"name"`
+	PasswordDigest string    `json:"password_digest"`
+	ImageUrl       string    `json:"image_url"`
+	AuthToken      string    `json:"auth_token"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// to do some validation on our input fields. File is done separately.
 func (gf *GuitarForm) FieldMap() binding.FieldMap {
 	return binding.FieldMap{
 		&gf.Name: binding.Field{
@@ -89,6 +103,10 @@ func main() {
 	r := render.New(render.Options{})
 	h := DBHandler{db: &db, r: r}
 
+	authRouter := mux.NewRouter()
+	authRouter.HandleFunc("/create", h.createUserHandler).Methods("POST")
+	authRouter.HandleFunc("/login", h.loginUserHandler).Methods("POST")
+
 	// setup a basic CRUD/REST API for our guitar store.
 	router := mux.NewRouter()
 	router.HandleFunc("/guitars", h.guitarsIndexHandler).Methods("GET")
@@ -97,10 +115,74 @@ func main() {
 	router.HandleFunc("/guitars/{id:[0-9]+}", h.guitarsUpdateHandler).Methods("PUT", "PATCH")
 	router.HandleFunc("/guitars/{id:[0-9]+}", h.guitarsDestroyHandler).Methods("DELETE")
 
+	//auth the guitar routes
+	authRouter.Handle("/guitars", negroni.New(
+		negroni.HandlerFunc(h.authHandler),
+		negroni.Wrap(router),
+	))
+
 	n := negroni.Classic()
-	n.UseHandler(router)
+	n.UseHandler(authRouter)
 	n.Run(":8080")
 }
+
+// create a new user
+func (h *DBHandler) createUserHandler(rw http.ResponseWriter, req *http.Request) {
+	// Get the form values out of the POST request.
+	name := req.FormValue("name")
+	password := req.FormValue("password")
+	imageUrl := req.FormValue("imageUrl")
+
+	// Generate a hashed password from bcrypt.
+	hashedPass, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
+	if err != nil {
+		log.Fatal(err)
+	}
+	count := 16
+	b := make([]byte, count)
+	rand.Seed(time.Now().UTC().UnixNano())
+	for i := 0; i < count; i++ {
+		b[i] = byte(rand.Intn(count))
+	}
+	token := hex.EncodeToString(b)
+	// Stick that in our users table of our db.
+	user := User{Name: name, PasswordDigest: string(hashedPass), ImageUrl: imageUrl, AuthToken: token, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	h.db.Save(&user)
+	user.PasswordDigest = "" //we don't need to expose that to the user
+	h.r.JSON(rw, http.StatusOK, &user)
+}
+
+//allows an existing user to login
+func (h *DBHandler) loginUserHandler(rw http.ResponseWriter, req *http.Request) {
+	// Get the form values out of the POST request.
+	name := req.FormValue("name")
+	password := req.FormValue("password")
+
+	user := User{}
+	h.db.Where("name = ?", name).First(&user) //in production code, we would of course validate this before running a where statement on a raw value
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordDigest), []byte(password)); err != nil {
+		log.Println("login error: ", err)
+		http.Error(rw, "Not authorized", http.StatusUnauthorized)
+		return
+	}
+	user.PasswordDigest = "" //we don't need to expose that to the user
+	h.r.JSON(rw, http.StatusOK, &user)
+}
+
+//middleware that checks to make sure the authToken is a valid user
+func (h *DBHandler) authHandler(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+
+	token := r.FormValue("auth_token")
+	user := User{}
+	h.db.Where("auth_token = ?", token).First(&user) //in production code, we would of course validate this before running a where statement on a raw value
+	if user.Name == "" {
+		http.Error(rw, "Not authorized", http.StatusUnauthorized)
+		return
+	}
+	next(rw, r)
+}
+
+// our guitar routes.
 
 // guitarsIndexHandler returns all our guitars out of the db in a paginated fashion.
 func (h *DBHandler) guitarsIndexHandler(rw http.ResponseWriter, req *http.Request) {
@@ -142,7 +224,7 @@ func (h *DBHandler) guitarsEdit(rw http.ResponseWriter, req *http.Request, id in
 		return
 	}
 
-	// normally we would upload to S3, but for this demo, we will just write to disk. See gist at end for S3 example.
+	// normally we would upload to S3, but for this demo, we will just write to disk. See this gist for S3 upload code.
 	upload, header, err := req.FormFile("file")
 	if err != nil {
 		h.r.JSON(rw, http.StatusBadRequest, map[string]string{"error": "bad file upload."})
