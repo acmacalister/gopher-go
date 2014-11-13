@@ -16,31 +16,34 @@ func main() {
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 
-	op, err := dnssd.StartRegisterOp("", "_airplay._tcp", port, RegisterCallbackFunc)
+	op := dnssd.NewRegisterOp("", "_raop._tcp", port, RegisterCallbackFunc)
+
+	// var hardwareAddr net.HardwareAddr
+	// interfaces, err := net.Interfaces()
+	// if err != nil {
+	// 	log.Println(err)
+	// }
+
+	// for _, inter := range interfaces {
+	// 	hardwareAddr = inter.HardwareAddr
+	// 	fmt.Println(inter.HardwareAddr)
+	// }
+
+	hardwareAddr := []byte{0x48, 0x5d, 0x60, 0x7c, 0xee, 0x22}
+
+	op.SetTXTPair("deviceid", string(hardwareAddr))
+	op.SetTXTPair("features", fmt.Sprintf("0x%x", 0x7))
+	op.SetTXTPair("model", "AppleTV2,1")
+	err = op.Start()
 	if err != nil {
 		log.Printf("Failed to register service: %s", err)
 		return
 	}
 
-	var hardwareAddr net.HardwareAddr
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		log.Println(err)
-	}
-	for _, inter := range interfaces {
-		hardwareAddr = inter.HardwareAddr
-		fmt.Println(inter.HardwareAddr)
-	}
-	op.SetTXTPair("deviceid", hardwareAddr.String())
-	op.SetTXTPair("features", fmt.Sprintf("0x%x", 0x7))
-	op.SetTXTPair("model", "AppleTV2,1")
-
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello, %s", r.RemoteAddr)
 	})
 	http.Serve(listener, nil)
-
-	log.Println("hi")
 
 	// later...
 	op.Stop()
